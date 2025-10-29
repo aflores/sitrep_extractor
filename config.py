@@ -20,6 +20,7 @@ FIRE_DANGER_IMAGE_URL = 'https://weather.fdacs.gov/FDI/images/FL-latest-fcst.png
 
 # Application Configuration
 TITLE = 'SFL Region Weather Sitrep worksheet'
+NO_IMAGE = 'IMAGE NOT AVAILABLE'
 NO_CAPTION = '*** CAPTION NOT PROVIDED FOR THIS IMAGE ***'
 OUTPUT_FILE_NAME = 'sitrep_workfile'
 
