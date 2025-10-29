@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en" data-delay-ms="{{ delay_ms }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="delay-ms" content="{{ delay_ms }}">
+    <title>{{app_title}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #d32f2f;
+            padding-bottom: 10px;
+        }
+        .description {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-left: 4px solid #d32f2f;
+            margin-bottom: 30px;
+            border-radius: 5px;
+        }
+        .description h3 {
+            margin-top: 0;
+            color: #d32f2f;
+        }
+        .description ul {
+            margin-bottom: 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus {
+            border-color: #d32f2f;
+            outline: none;
+        }
+        .generate-btn {
+            background-color: #d32f2f;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        .generate-btn:hover {
+            background-color: #b71c1c;
+        }
+        .generate-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #d32f2f;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+        .alert-error {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .download-status {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 4px;
+            color: #155724;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ app_title }}</h1>
+        
+        <div class="description">
+            <h3>Report Components:</h3>
+            <ul>
+                <li><strong>NWS Reports:</strong> Miami, Tampa, and Melbourne offices with images and descriptions</li>
+                <li><strong>NHC Seven-Day Forecast:</strong> Graphical Tropical Weather Outlook</li>
+                <li><strong>Fire Danger Maps:</strong> Florida Department of Agriculture Fire Danger Maps</li>
+            </ul>
+            <p>This tool generates a Word document that can be used as source material for the SFL Region Weather Sitrep template.</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/generate" id="reportForm">
+            <div class="form-group">
+                <label for="label1">Report Label (Optional):</label>
+                <input type="text" id="label1" name="label1" placeholder="Enter a custom label for this report (e.g., Special Event, Hurricane Season, etc.)">
+            </div>
+            
+            <button type="submit" class="generate-btn" id="generateBtn">
+                Generate Sitrep Report
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Generating report... This may take a minute or two while we fetch the latest weather data.</p>
+        </div>
+
+        <div class="download-status" id="downloadStatus">
+            <strong>✓ Report generated successfully!</strong><br>
+            Your download should start shortly. If not, please check your downloads folder.
+        </div>
+
+        <div class="footer">
+            Weather Sitrep Generation Tool</p>
+        </div>
+    </div>
+
+    <script>
+        // Get config values from data attributes
+        // this is a workaround about VS code not understanding jinja2 template syntax
+        // const DELAY_MS == {{ delay_ms }}; // would have been cleaner :-(
+        const DELAY_MS = parseInt(document.documentElement.dataset.delayMs);
+        
+        let downloadTimer;
+        
+        document.getElementById('reportForm').addEventListener('submit', function(e) {
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('generateBtn').textContent = 'Generating...';
+            
+            // Set up download completion detection
+            const originalFormAction = this.action;
+            
+            // Use a simple timeout to reset the form after a reasonable time
+            downloadTimer = setTimeout(function() {
+                resetForm();
+            }, DELAY_MS); // Reset after delay_ms milliseconds, assuming download has started
+            
+            // Also detect when the user comes back to the window (likely after download dialog)
+            let windowFocused = false;
+            const focusHandler = function() {
+                if (!windowFocused) {
+                    windowFocused = true;
+                    setTimeout(function() {
+                        resetForm();
+                    }, 1000);
+                    window.removeEventListener('focus', focusHandler);
+                }
+            };
+            
+            // Add focus listener with a delay to avoid immediate triggering
+            setTimeout(function() {
+                window.addEventListener('focus', focusHandler);
+            }, 2000);
+        });
+        
+        function resetForm() {
+            if (downloadTimer) {
+                clearTimeout(downloadTimer);
+                downloadTimer = null;
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = 'Generate Sitrep Report';
+            
+            // Show success message
+            document.getElementById('downloadStatus').style.display = 'block';
+            
+            // Hide success message after delay_ms seconds
+            setTimeout(function() {
+                document.getElementById('downloadStatus').style.display = 'none';
+            }, DELAY_MS);
+        }
+
+        // Reset form if page is refreshed
+        window.addEventListener('load', function() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('generateBtn').disabled = false;
+            document.getElementById('generateBtn').textContent = 'Generate Sitrep Report';
+            document.getElementById('downloadStatus').style.display = 'none';
+        });
+    </script>
+</body>
+</html>
