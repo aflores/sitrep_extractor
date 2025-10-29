@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_title }} - Generating Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #d32f2f;
+            padding-bottom: 10px;
+        }
+        .progress-container {
+            margin: 30px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #d32f2f, #ff6b6b);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .progress-message {
+            text-align: center;
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 20px;
+            min-height: 24px;
+        }
+        .status-icon {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #d32f2f;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .success-icon {
+            color: #4caf50;
+            font-size: 24px;
+        }
+        .error-icon {
+            color: #f44336;
+            font-size: 24px;
+        }
+        .download-section {
+            text-align: center;
+            margin-top: 30px;
+            display: none;
+        }
+        .download-btn {
+            background-color: #4caf50;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #d32f2f;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .error-details {
+            background-color: #ffebee;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            color: #721c24;
+            display: none;
+        }
+        .step-list {
+            text-align: left;
+            margin: 20px 0;
+        }
+        .step-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .step-item:last-child {
+            border-bottom: none;
+        }
+        .step-item.completed {
+            color: #4caf50;
+        }
+        .step-item.current {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+        .step-item.pending {
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ app_title }}</h1>
+        
+        <div class="progress-container">
+            <div class="progress-message" id="progressMessage">
+                <span class="status-icon"><div class="spinner"></div></span>
+                Initializing report generation...
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            
+            <div class="step-list">
+                <div class="step-item pending" id="step-1">📄 Initializing document</div>
+                <div class="step-item pending" id="step-2">🌦️  Fetching NWS Miami data</div>
+                <div class="step-item pending" id="step-3">🌦️  Fetching NWS Tampa data</div>
+                <div class="step-item pending" id="step-4">🌦️  Fetching NWS Melbourne data</div>
+                <div class="step-item pending" id="step-5">🌀 Fetching NHC forecast data</div>
+                <div class="step-item pending" id="step-6">🔥 Fetching fire danger maps</div>
+                <div class="step-item pending" id="step-7">📋 Generating final document</div>
+                <div class="step-item pending" id="step-8">✅ Finalizing report</div>
+            </div>
+        </div>
+        
+        <div class="download-section" id="downloadSection">
+            <a href="#" class="download-btn" id="downloadBtn">Download Report</a>
+        </div>
+        
+        <div class="error-details" id="errorDetails"></div>
+        
+        <a href="{{ url_for('index') }}" class="back-link">← Back to Main Page</a>
+    </div>
+
+    <script>
+        const taskId = "{{ task_id }}";
+        const label1Value = "{{ label1_value }}";
+        
+        // Connect to Server-Sent Events
+        const eventSource = new EventSource(`/progress/${taskId}?label1=${encodeURIComponent(label1Value)}`);
+        
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateProgress(data);
+        };
+        
+        eventSource.onerror = function(event) {
+            console.error('EventSource failed:', event);
+            eventSource.close();
+            showError('Connection lost. Please refresh the page to try again.');
+        };
+        
+        function updateProgress(data) {
+            const progressFill = document.getElementById('progressFill');
+            const progressMessage = document.getElementById('progressMessage');
+            
+            // Update progress bar
+            progressFill.style.width = data.progress + '%';
+            progressFill.textContent = Math.round(data.progress) + '%';
+            
+            // Update current step
+            if (data.current_step) {
+                updateStepStatus(data.current_step, data.completed_steps || []);
+            }
+            
+            // Update status message
+            if (data.status === 'completed') {
+                progressMessage.innerHTML = '<span class="status-icon success-icon">✅</span>' + data.message;
+                eventSource.close();
+                showDownloadButton(data.filename);
+            } else if (data.status === 'error') {
+                progressMessage.innerHTML = '<span class="status-icon error-icon">❌</span>' + data.message;
+                eventSource.close();
+                showError(data.error || 'Unknown error occurred');
+            } else {
+                progressMessage.innerHTML = '<span class="status-icon"><div class="spinner"></div></span>' + data.message;
+            }
+        }
+        
+        function updateStepStatus(currentStep, completedSteps) {
+            // Reset all steps
+            for (let i = 1; i <= 8; i++) {
+                const stepElement = document.getElementById(`step-${i}`);
+                stepElement.className = 'step-item pending';
+            }
+            
+            // Mark completed steps
+            completedSteps.forEach(stepNum => {
+                const stepElement = document.getElementById(`step-${stepNum}`);
+                if (stepElement) {
+                    stepElement.className = 'step-item completed';
+                }
+            });
+            
+            // Mark current step
+            if (currentStep) {
+                const currentElement = document.getElementById(`step-${currentStep}`);
+                if (currentElement) {
+                    currentElement.className = 'step-item current';
+                }
+            }
+        }
+        
+        function showDownloadButton(filename) {
+            const downloadSection = document.getElementById('downloadSection');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            downloadBtn.href = `/download/${taskId}`;
+            downloadSection.style.display = 'block';
+        }
+        
+        function showError(errorMessage) {
+            const errorDetails = document.getElementById('errorDetails');
+            errorDetails.textContent = errorMessage;
+            errorDetails.style.display = 'block';
+        }
+        
+        // Handle page visibility change (user switches tabs)
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // Page is hidden, but keep EventSource open
+            } else {
+                // Page is visible again
+                console.log('Page visible again');
+            }
+        });
+    </script>
+</body>
+</html>

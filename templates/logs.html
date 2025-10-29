@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_title }} - {{ log_type | title }} Logs</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #d32f2f;
+            padding-bottom: 10px;
+        }
+        .nav-links {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .nav-links a, .nav-links select, .nav-links button {
+            color: #d32f2f;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 8px 16px;
+            border: 1px solid #d32f2f;
+            border-radius: 4px;
+            background-color: white;
+            cursor: pointer;
+        }
+        .nav-links a:hover, .nav-links button:hover {
+            background-color: #d32f2f;
+            color: white;
+        }
+        .log-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .log-container {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            max-height: 600px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .log-line {
+            margin-bottom: 2px;
+            padding: 2px 0;
+        }
+        .log-line:hover {
+            background-color: #2d2d30;
+        }
+        .log-level-INFO { color: #4fc3f7; }
+        .log-level-WARNING { color: #ffb74d; }
+        .log-level-ERROR { color: #f48fb1; }
+        .log-level-DEBUG { color: #81c784; }
+        .timestamp { color: #9e9e9e; }
+        .logger-name { color: #fff59d; }
+        .filters {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .filter-input {
+            padding: 8px;
+            margin: 0 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ app_title }} - {{ log_type | title }} Logs</h1>
+        
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}">← Back to Main</a>
+            <a href="{{ url_for('status') }}">Server Status</a>
+            <a href="{{ url_for('view_logs', type='app') }}">App Logs</a>
+            <a href="{{ url_for('view_logs', type='requests') }}">Request Logs</a>
+            
+            <select onchange="changeLines(this.value)">
+                <option value="50" {% if request.args.get('lines', '50') == '50' %}selected{% endif %}>50 lines</option>
+                <option value="100" {% if request.args.get('lines') == '100' %}selected{% endif %}>100 lines</option>
+                <option value="250" {% if request.args.get('lines') == '250' %}selected{% endif %}>250 lines</option>
+                <option value="500" {% if request.args.get('lines') == '500' %}selected{% endif %}>500 lines</option>
+            </select>
+            
+            <button onclick="location.reload()">🔄 Refresh</button>
+        </div>
+        
+        <div class="log-info">
+            <strong>Log Type:</strong> {{ log_type | title }} | 
+            <strong>Showing:</strong> {{ log_lines | length }} of {{ total_lines }} total lines | 
+            <strong>Last Updated:</strong> <span id="lastUpdate"></span>
+        </div>
+        
+        <div class="filters">
+            <input type="text" class="filter-input" id="filterInput" placeholder="Filter logs..." onkeyup="filterLogs()">
+            <button onclick="clearFilter()">Clear Filter</button>
+            <button onclick="scrollToBottom()">↓ Scroll to Bottom</button>
+        </div>
+        
+        <div class="log-container" id="logContainer">
+            {% for line in log_lines %}
+            <div class="log-line" data-original="{{ line }}">{{ line | e }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <script>
+        // Update timestamp
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
+        
+        // Auto-refresh every 15 seconds
+        setTimeout(function() {
+            location.reload();
+        }, 15000);
+        
+        function changeLines(lines) {
+            const url = new URL(window.location);
+            url.searchParams.set('lines', lines);
+            window.location = url;
+        }
+        
+        function filterLogs() {
+            const filter = document.getElementById('filterInput').value.toLowerCase();
+            const lines = document.querySelectorAll('.log-line');
+            
+            lines.forEach(line => {
+                const text = line.textContent.toLowerCase();
+                if (text.includes(filter)) {
+                    line.style.display = 'block';
+                } else {
+                    line.style.display = 'none';
+                }
+            });
+        }
+        
+        function clearFilter() {
+            document.getElementById('filterInput').value = '';
+            filterLogs();
+        }
+        
+        function scrollToBottom() {
+            const container = document.getElementById('logContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Scroll to bottom on load
+        window.addEventListener('load', scrollToBottom);
+        
+        // Highlight log levels
+        document.querySelectorAll('.log-line').forEach(line => {
+            const text = line.textContent;
+            if (text.includes(' - INFO - ')) {
+                line.classList.add('log-level-INFO');
+            } else if (text.includes(' - WARNING - ')) {
+                line.classList.add('log-level-WARNING');
+            } else if (text.includes(' - ERROR - ')) {
+                line.classList.add('log-level-ERROR');
+            } else if (text.includes(' - DEBUG - ')) {
+                line.classList.add('log-level-DEBUG');
+            }
+        });
+    </script>
+</body>
+</html>

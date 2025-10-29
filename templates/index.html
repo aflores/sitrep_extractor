@@ -1,9 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" data-delay-ms="{{ delay_ms }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="delay-ms" content="{{ delay_ms }}">
     <title>{{app_title}}</title>
     <style>
         body {
@@ -168,86 +166,17 @@
             </button>
         </form>
 
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Generating report... This may take a minute or two while we fetch the latest weather data.</p>
-        </div>
-
-        <div class="download-status" id="downloadStatus">
-            <strong>✓ Report generated successfully!</strong><br>
-            Your download should start shortly. If not, please check your downloads folder.
-        </div>
-
         <div class="footer">
             Weather Sitrep Generation Tool</p>
         </div>
     </div>
 
     <script>
-        // Get config values from data attributes
-        // this is a workaround about VS code not understanding jinja2 template syntax
-        // const DELAY_MS == {{ delay_ms }}; // would have been cleaner :-(
-        const DELAY_MS = parseInt(document.documentElement.dataset.delayMs);
-        
-        let downloadTimer;
-        
+        // Simple form submission - no timer-based logic needed
+        // The new real-time progress page will handle everything
         document.getElementById('reportForm').addEventListener('submit', function(e) {
-            // Show loading indicator
-            document.getElementById('loading').style.display = 'block';
             document.getElementById('generateBtn').disabled = true;
-            document.getElementById('generateBtn').textContent = 'Generating...';
-            
-            // Set up download completion detection
-            const originalFormAction = this.action;
-            
-            // Use a simple timeout to reset the form after a reasonable time
-            downloadTimer = setTimeout(function() {
-                resetForm();
-            }, DELAY_MS); // Reset after delay_ms milliseconds, assuming download has started
-            
-            // Also detect when the user comes back to the window (likely after download dialog)
-            let windowFocused = false;
-            const focusHandler = function() {
-                if (!windowFocused) {
-                    windowFocused = true;
-                    setTimeout(function() {
-                        resetForm();
-                    }, 1000);
-                    window.removeEventListener('focus', focusHandler);
-                }
-            };
-            
-            // Add focus listener with a delay to avoid immediate triggering
-            setTimeout(function() {
-                window.addEventListener('focus', focusHandler);
-            }, 2000);
-        });
-        
-        function resetForm() {
-            if (downloadTimer) {
-                clearTimeout(downloadTimer);
-                downloadTimer = null;
-            }
-            
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('generateBtn').disabled = false;
-            document.getElementById('generateBtn').textContent = 'Generate Sitrep Report';
-            
-            // Show success message
-            document.getElementById('downloadStatus').style.display = 'block';
-            
-            // Hide success message after delay_ms seconds
-            setTimeout(function() {
-                document.getElementById('downloadStatus').style.display = 'none';
-            }, DELAY_MS);
-        }
-
-        // Reset form if page is refreshed
-        window.addEventListener('load', function() {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('generateBtn').disabled = false;
-            document.getElementById('generateBtn').textContent = 'Generate Sitrep Report';
-            document.getElementById('downloadStatus').style.display = 'none';
+            document.getElementById('generateBtn').textContent = 'Starting Generation...';
         });
     </script>
 </body>

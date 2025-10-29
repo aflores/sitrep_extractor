@@ -24,6 +24,8 @@ NO_IMAGE = 'IMAGE NOT AVAILABLE'
 NO_CAPTION = '*** CAPTION NOT PROVIDED FOR THIS IMAGE ***'
 OUTPUT_FILE_NAME = 'sitrep_workfile'
 
-# How long to wait before closing the Success message (in msecs.)
-DELAY_MS = 10000
-
+# Logging Configuration
+LOG_LEVEL = 'INFO'
+LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
+LOG_BACKUP_COUNT = 5
+SLOW_REQUEST_THRESHOLD = 5000  # milliseconds
