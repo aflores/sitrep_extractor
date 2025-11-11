@@ -114,3 +114,7 @@ Key configuration options in `config.py`:
 - `NWS_BASE_URL`: Base URL for National Weather Service
 - `NHC_URL`: National Hurricane Center URL
 - `FIRE_DANGER_IMAGE_URL`: Florida fire danger map URL
+
+
+Run locally with:
+conda run -p /Users/aflores/miniconda3 --no-capture-output python app.py
