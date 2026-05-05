@@ -77,6 +77,10 @@ docs/_build/
 # PyBuilder
 target/
 
+# local log
+logs/
+
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
@@ -106,6 +110,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .venv
 env/
 venv/

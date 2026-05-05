@@ -30,19 +30,16 @@ A web application that generates Weather Situation Reports (Sitreps) for the Ame
 1. **Clone or download the project files**
 
 2. **Set up configuration**:
-   ```bash
-   cp config.example.py config.py
-   ```
    - Edit `config.py` to customize URLs and settings if needed
+   - Set your Firecrawl secret as an environment variable:
+   ```bash
+   export FIRECRAWL_API_KEY="fc-your-key"
+   ```
 
 3. **Install Python dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
-
-4. **Install Chrome WebDriver** (required for Selenium):
-   - Download ChromeDriver from https://chromedriver.chromium.org/
-   - Make sure it's in your system PATH or place it in the project directory
 
 ## Running the Application
 
@@ -72,12 +69,11 @@ A web application that generates Weather Situation Reports (Sitreps) for the Ame
 ## Technical Requirements
 
 - Python 3.7+
-- Chrome browser (for Selenium WebDriver)
 - Internet connection (for fetching weather data)
 
 ## Troubleshooting
 
-- **Chrome Driver Issues**: Ensure ChromeDriver is installed and matches your Chrome browser version
+- **Missing Firecrawl API Key**: Ensure `FIRECRAWL_API_KEY` is set in your environment before running the app
 - **Network Timeouts**: Some weather websites may be slow to respond; the application will retry or use placeholder content
 - **Memory Usage**: The application processes images and web content, so ensure adequate system memory
 
@@ -91,7 +87,6 @@ This Flask application is based on the original Jupyter notebook `sitrep_extract
 sitrep_extractor/
 ├── app.py                    # Flask web application
 ├── config.py                 # Configuration settings
-├── config.example.py         # Example configuration file
 ├── requirements.txt          # Python dependencies
 ├── templates/
 │   └── index.html           # Web interface template
