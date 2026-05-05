@@ -1,11 +1,6 @@
-<<<<<<< dependabot/pip/requests-2.33.0
 requests==2.33.0
-beautifulsoup4==4.12.3
-=======
-requests==2.32.5
 firecrawl-py
 python-dotenv
->>>>>>> old
 python-docx==1.2.0
 Pillow==12.2.0
 Flask==3.1.3
