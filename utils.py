@@ -74,6 +74,9 @@ external_logger = setup_external_requests_logger()
 # Initialize Firecrawl client
 firecrawl = Firecrawl(api_key=FIRECRAWL_API_KEY)
 
+REQUEST_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 def request_page(url):
     """
@@ -194,8 +197,8 @@ def get_image(img_url):
     try:
         external_logger.info(f"IMAGE REQUEST START - URL: {img_url}")
         
-        # Make the request with timeout
-        response = requests.get(img_url, timeout=30)
+        # Make the request with timeout and explicit browser-style User-Agent
+        response = requests.get(img_url, headers=REQUEST_HEADERS, timeout=30)
         
         # Calculate response time
         response_time = (datetime.now() - start_time).total_seconds() * 1000
