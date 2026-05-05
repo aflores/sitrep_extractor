@@ -1,6 +1,6 @@
 """
 Utility functions for web scraping and data extraction.
-Contains functions related to HTTP requests, BeautifulSoup parsing, and data processing.
+Contains functions related to Firecrawl-based scraping and data processing.
 """
 
 import requests
@@ -10,25 +10,26 @@ import tempfile
 import os
 import logging
 from datetime import datetime
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from bs4 import BeautifulSoup
+from firecrawl import Firecrawl
 from PIL import Image, ImageDraw, ImageFont
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.section import WD_SECTION
-## from PIL.ImageFont import FreeTypeFont
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from config import (
     NWS_FORECAST_OFFICES,
     NWS_BASE_URL,
-    NWS_DESCRIPTION_SELECTOR,
     NO_CAPTION,
     NO_IMAGE,
     NHC_URL,
     NHC_7DAY_IMG_URL,
+    FIRE_DANGER_URL,
     FIRE_DANGER_IMAGE_URL,
     TITLE,
-    OUTPUT_FILE_NAME
+    OUTPUT_FILE_NAME,
+    FIRECRAWL_API_KEY
 )
 
 # Set up external requests logger
@@ -70,59 +71,41 @@ def setup_external_requests_logger():
 # Initialize the external requests logger
 external_logger = setup_external_requests_logger()
 
+# Initialize Firecrawl client
+firecrawl = Firecrawl(api_key=FIRECRAWL_API_KEY)
+
 
 def request_page(url):
     """
-    Fetch a page and return the text in the response with comprehensive logging.
+    Fetch a page using Firecrawl and return the HTML content.
     
     Args:
         url (str): The URL to fetch
         
     Returns:
-        str or None: The response text if successful, None if there was an error
+        str or None: The HTML content if successful, None if there was an error
     """
     start_time = datetime.now()
     
     try:
-        external_logger.info(f"HTTP REQUEST START - URL: {url}")
+        external_logger.info(f"FIRECRAWL REQUEST START - URL: {url}")
         
-        # Make the request with timeout
-        response = requests.get(url, timeout=30)
+        result = firecrawl.scrape(url, formats=['html'])
+        html = result.html if result and hasattr(result, 'html') else None
         
-        # Calculate response time
         response_time = (datetime.now() - start_time).total_seconds() * 1000
-        
-        # Log response details
         external_logger.info(
-            f"HTTP REQUEST SUCCESS - URL: {url} - "
-            f"Status: {response.status_code} - "
+            f"FIRECRAWL REQUEST SUCCESS - URL: {url} - "
             f"Time: {response_time:.2f}ms - "
-            f"Size: {len(response.content)} bytes - "
-            f"Content-Type: {response.headers.get('content-type', 'Unknown')}"
+            f"Size: {len(html) if html else 0} chars"
         )
-        
-        response.raise_for_status()
-        return response.text
-        
-    except requests.exceptions.Timeout:
-        response_time = (datetime.now() - start_time).total_seconds() * 1000
-        external_logger.error(f"HTTP REQUEST TIMEOUT - URL: {url} - Time: {response_time:.2f}ms")
-        return None
-        
-    except requests.exceptions.RequestException as e:
-        response_time = (datetime.now() - start_time).total_seconds() * 1000
-        external_logger.error(
-            f"HTTP REQUEST ERROR - URL: {url} - "
-            f"Error: {str(e)} - "
-            f"Time: {response_time:.2f}ms"
-        )
-        return None
+        return html
         
     except Exception as e:
         response_time = (datetime.now() - start_time).total_seconds() * 1000
         external_logger.error(
-            f"HTTP REQUEST EXCEPTION - URL: {url} - "
-            f"Exception: {str(e)} - "
+            f"FIRECRAWL REQUEST ERROR - URL: {url} - "
+            f"Error: {str(e)} - "
             f"Time: {response_time:.2f}ms"
         )
         return None
@@ -133,7 +116,7 @@ def extract_nws_info(nws_response):
     Obtain the description from the bottom of the first image on the response and the URL of the image.
     
     Args:
-        nws_response (str): HTML response content from NWS page
+        nws_response (str): HTML content from NWS page
         
     Returns:
         dict: Dictionary containing 'description' and 'image_url'
@@ -141,21 +124,28 @@ def extract_nws_info(nws_response):
     if not nws_response:
         return {"description": "*** ERROR FETCHING PAGE ***", "image_url": None}
     
-    soup = BeautifulSoup(nws_response, 'html.parser')
-    desc_element = soup.select_one(NWS_DESCRIPTION_SELECTOR)
-    
-    if desc_element:
-        desc = desc_element.text.strip().replace('Click/tap image to enlarge | ','')
+    # Extract description text from the graphicast description div
+    desc_match = re.search(
+        r'<div[^>]+class=["\'][^"\'>]*graphicast[^"\'>]*["\'][^>]*>.*?'
+        r'<div[^>]+class=["\'][^"\'>]*description[^"\'>]*["\'][^>]*>(.*?)</div>',
+        nws_response, re.DOTALL | re.IGNORECASE
+    )
+    if desc_match:
+        desc = re.sub(r'<[^>]+>', '', desc_match.group(1)).strip()
+        desc = desc.replace('Click/tap image to enlarge | ', '')
     else:
         desc = NO_CAPTION
-    
-    # Check if a description is provided
-    if len(desc) == 0:
-        desc = NO_CAPTION 
-    
-    # Get the url of the first image in the page
-    img_element = soup.select_one('div.graphicast img')
-    img_url = img_element.attrs['src'] if img_element else None
+
+    if not desc:
+        desc = NO_CAPTION
+
+    # Extract the src of the first img inside a graphicast div
+    img_match = re.search(
+        r'<div[^>]+class=["\'][^"\'>]*graphicast[^"\'>]*["\'][^>]*>.*?'
+        r'<img[^>]+src=["\']([^"\']+)["\']',
+        nws_response, re.DOTALL | re.IGNORECASE
+    )
+    img_url = img_match.group(1) if img_match else None
 
     return {"description": desc, "image_url": img_url}
 
@@ -260,7 +250,7 @@ def get_image(img_url):
 def extract_text_arrays_from_url(url):
     """
     Extract description of items in NHC Seven-day Graphical Tropical Weather Outlook.
-    Uses Selenium to fetch dynamically loaded content and BeautifulSoup to parse.
+    Uses Firecrawl to fetch JS-rendered content and regex to parse Text arrays.
     
     Args:
         url (str): URL to extract text arrays from
@@ -270,80 +260,51 @@ def extract_text_arrays_from_url(url):
     """
     nhc_text = []
     start_time = datetime.now()
-    driver = None
     
     try:
-        external_logger.info(f"SELENIUM REQUEST START - URL: {url}")
+        external_logger.info(f"FIRECRAWL REQUEST START - URL: {url}")
         
-        # Set up Selenium with headless Chrome
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        driver = webdriver.Chrome(options=chrome_options)
-
-        # Fetch the fully loaded page
-        driver.get(url)
-        page_source = driver.page_source
+        result = firecrawl.scrape(url, formats=['html'])
+        page_source = result.html if result and hasattr(result, 'html') else ''
         page_load_time = (datetime.now() - start_time).total_seconds() * 1000
         
         external_logger.info(
-            f"SELENIUM PAGE LOADED - URL: {url} - "
+            f"FIRECRAWL PAGE LOADED - URL: {url} - "
             f"Time: {page_load_time:.2f}ms - "
             f"Page size: {len(page_source)} chars"
         )
-        
-        driver.quit()
-        driver = None
 
-        # Parse the HTML content with BeautifulSoup
-        soup = BeautifulSoup(page_source, 'html.parser')
-
-        # Find all <script> tags
-        script_tags = soup.find_all('script')
-        external_logger.debug(f"SELENIUM PARSING - URL: {url} - Found {len(script_tags)} script tags")
-
-        # Regex pattern to find arrays named 'Text'
+        # Regex pattern to find arrays named 'Text' in script content
         pattern = r'Text\[\d+\]\s*=\s*\[([^\]]*)\]'
+        found_arrays = [m.group(1).strip() for m in re.finditer(pattern, page_source, re.MULTILINE)]
 
-        found_arrays = []
-        for script in script_tags:
-            if script.string:
-                matches = re.finditer(pattern, script.string, re.MULTILINE)
-                found_arrays.extend([match.group(1).strip() for match in matches])
-
-        external_logger.info(f"SELENIUM TEXT EXTRACTION - URL: {url} - Found {len(found_arrays)} text arrays")
+        external_logger.info(f"FIRECRAWL TEXT EXTRACTION - URL: {url} - Found {len(found_arrays)} text arrays")
 
         if found_arrays:
-            for idx, content in enumerate(found_arrays, 1):
+            for content in found_arrays:
                 items = re.split(r',\s*(?=(?:[^"]*"[^"]*")*[^"]*$)', content)
                 clean_items = []
                 for item in items:
                     item = item.strip().strip("'").strip('"')
                     if item:
-                        soup = BeautifulSoup(item, 'html.parser')
-                        sub_items = []
-                        for element in soup.find_all(string=True, recursive=True):
-                            text = element.strip()
-                            if text:
-                                sub_texts = text.split('\n')
-                                for sub_text in sub_texts:
-                                    sub_text = sub_text.strip()
-                                    if sub_text:
-                                        sub_text = sub_text.replace('(click for details)', '').strip()
-                                        if sub_text:
-                                            sub_items.append(sub_text)
-                        clean_items.extend(sub_items)
+                        # Strip HTML tags and normalise whitespace
+                        plain = re.sub(r'<[^>]+>', ' ', item)
+                        plain = re.sub(r'\s+', ' ', plain).strip()
+                        plain = plain.replace('(click for details)', '').strip()
+                        if plain:
+                            for line in plain.split('\n'):
+                                line = line.strip()
+                                if line:
+                                    clean_items.append(line)
                 paragraph = '\n'.join(clean_items).strip()
                 nhc_text.append(paragraph)
         else:
             nhc_text.append("No tropical weather outlook data available")
-            external_logger.warning(f"SELENIUM NO DATA - URL: {url} - No tropical weather outlook data found")
+            external_logger.warning(f"FIRECRAWL NO DATA - URL: {url} - No tropical weather outlook data found")
 
         total_time = (datetime.now() - start_time).total_seconds() * 1000
         external_logger.info(
-            f"SELENIUM REQUEST SUCCESS - URL: {url} - "
+            f"FIRECRAWL REQUEST SUCCESS - URL: {url} - "
             f"Total time: {total_time:.2f}ms - "
             f"Extracted {len(nhc_text)} text blocks"
         )
@@ -351,18 +312,11 @@ def extract_text_arrays_from_url(url):
     except Exception as e:
         total_time = (datetime.now() - start_time).total_seconds() * 1000
         external_logger.error(
-            f"SELENIUM REQUEST ERROR - URL: {url} - "
+            f"FIRECRAWL REQUEST ERROR - URL: {url} - "
             f"Error: {str(e)} - "
             f"Time: {total_time:.2f}ms"
         )
         nhc_text.append("Error extracting NHC data")
-    finally:
-        # Ensure driver is properly closed
-        if driver:
-            try:
-                driver.quit()
-            except Exception as e:
-                external_logger.warning(f"SELENIUM CLEANUP WARNING - Error closing driver: {str(e)}")
     
     return nhc_text
 
@@ -370,6 +324,45 @@ def extract_text_arrays_from_url(url):
 # Global dictionaries to store images and descriptions
 nws_image = {}
 nws_description = {}
+
+REPORT_SOURCES = [
+    ("NWS Miami, FL", f"{NWS_BASE_URL}/mfl/"),
+    ("NWS Tampa, FL", f"{NWS_BASE_URL}/tbw/"),
+    ("NWS Melbourne, FL", f"{NWS_BASE_URL}/mlb/"),
+    ("Florida Department of Agriculture Fire Danger Index", FIRE_DANGER_URL),
+]
+
+
+def add_hyperlink(paragraph, text, url):
+    """Append a clickable hyperlink run to a paragraph."""
+    part = paragraph.part
+    rel_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
+
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), rel_id)
+
+    run = OxmlElement('w:r')
+    run_properties = OxmlElement('w:rPr')
+    run_style = OxmlElement('w:rStyle')
+    run_style.set(qn('w:val'), 'Hyperlink')
+    run_properties.append(run_style)
+    run.append(run_properties)
+
+    text_element = OxmlElement('w:t')
+    text_element.text = text
+    run.append(text_element)
+    hyperlink.append(run)
+
+    paragraph._p.append(hyperlink)
+
+
+def add_sources_page(document):
+    """Append a final page listing report sources."""
+    document.add_section(WD_SECTION.NEW_PAGE)
+    document.add_heading('SOURCES', level=2)
+    for source_name, source_url in REPORT_SOURCES:
+        source_paragraph = document.add_paragraph()
+        add_hyperlink(source_paragraph, source_name, source_url)
 
 
 def append_datetime(input_string):
@@ -439,9 +432,10 @@ def generate_sitrep_document(label1_value):
             document.add_heading(ofc, level=2)
             if ofc in nws_image and nws_image[ofc]:
                 try:
+                    nws_image[ofc].seek(0)
                     document.add_picture(nws_image[ofc], width=Inches(5.5))
-                except Exception:
-                    pass
+                except Exception as img_err:
+                    external_logger.error(f"Failed to add picture for {ofc}: {img_err}")
 
             if ofc in nws_description:
                 document.add_paragraph(nws_description[ofc].strip())
@@ -469,6 +463,9 @@ def generate_sitrep_document(label1_value):
                 document.add_picture(fire_risk_img, width=Inches(4.0))
             except Exception:
                 pass
+
+        # Sources page
+        add_sources_page(document)
 
         # Save document
         document.save(temp_file.name)
@@ -566,9 +563,10 @@ def generate_sitrep_document_with_progress(label1_value, task_id):
             document.add_heading(office_name, level=2)
             if office_name in local_nws_image and local_nws_image[office_name]:
                 try:
+                    local_nws_image[office_name].seek(0)
                     document.add_picture(local_nws_image[office_name], width=Inches(5.5))
-                except Exception:
-                    pass
+                except Exception as img_err:
+                    external_logger.error(f"Failed to add picture for {office_name}: {img_err}")
 
             if office_name in local_nws_description:
                 document.add_paragraph(local_nws_description[office_name].strip())
@@ -616,6 +614,9 @@ def generate_sitrep_document_with_progress(label1_value, task_id):
             except Exception:
                 pass
         completed_steps.append(6)
+
+        # Sources page
+        add_sources_page(document)
 
         # Step 7: Save document
         yield {

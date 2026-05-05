@@ -1,6 +1,6 @@
 requests==2.32.5
-beautifulsoup4==4.12.3
+firecrawl-py
+python-dotenv
 python-docx==1.2.0
-selenium==4.38.0
 Pillow==12.2.0
 Flask==3.0.3
